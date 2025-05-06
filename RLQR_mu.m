@@ -10,57 +10,60 @@ import Aux.*
 
 % System matrices
 F = [1.1, 0, 0;
-     0, 0, 1.2;
-    -1, 1, 0];
+     0, 1, 0;
+    -1, 1, .9];
 
 G = [0, 1;
      1, 1;
-    -1, 0];
+    -1, 1];
 
 % Include unceartainties? Y(1)/N(0)
 a = 1;
 
 % Unceartainties matrices
-H = [.7;
-     .5;
-    -.7 ];
+H = [.1;
+     1.5;
+    -1];
 
 E_F = a*[.4, .5, -.6];
 E_G = a*[.4, -.4];
 
 % Initial states
-xo = [.1; -.1; .5];
+xo = [1; -1; .5];
 
-% Penalty parameters: mu>0
-mu = [1e2, 1e5, 1e10];
+% Penalty parameters: 
+mu = [1e2, 1e5, 1e10, 1e12]; % mu = 1ex > 0 
 
 % Loop length
-Horizonte = 70;
+N = 70;
 
 % Covariance matrices
 [n_size, m_size] = size(G);
-Q = eye(n_size, n_size);                % State weighting matrix
-R = eye(m_size, m_size);                % Control weighting matrix
-K = zeros(m_size, n_size, Horizonte);   % Gain matrix
-L = zeros(n_size, n_size, Horizonte);   % L matrix
-P = zeros(n_size, n_size, Horizonte+1); % Ricatti matrix
-P(:, :, 1) = eye(n_size);               % Initial P value
+Q = eye(n_size, n_size);          % State weighting matrix
+R = eye(m_size, m_size);          % Control weighting matrix
+K = zeros(m_size, n_size, N);     % Gain matrix
+L = zeros(n_size, n_size, N);     % L matrix
+P = zeros(n_size, n_size, N+1);   % Ricatti matrix
+P(:, :, 1) = eye(n_size);         % Initial P value
 
 % Figures settings
 Titles = ["Poles: Open-Loop System";
           "Poles: Closed-Loop System";
           "Poles: Closed-Loop System";
+          "Poles: Closed-Loop System";
           "Poles: Closed-Loop System"];
 
 Fig_names = ["Open-loop";
-             "mu = 10";
-             "mu = 100";
-             "mu = 10^10"];
+             "mu = " + mu(1);
+             "mu = " + mu(2);
+             "mu = " + mu(3)
+             "mu = " + mu(4)];
 
 %% Open-loop
 
 K_final = zeros(2,3);
 pos_polos(F, E_F, G, E_G, H, K_final, 1000, Fig_names(1), Titles(1));
+disp("System Paused. Press any key to continue...");
 pause
 
 %% EigenValues (Feedback System)
@@ -68,18 +71,23 @@ pause
 for i=1:length(mu)
 
     % Robust LQR
-    for j = 1:Horizonte
+    for j = 1:N
         [L(:,:,j), K(:,:,j), P(:,:,j+1)] = robust_lqr(F, G, E_F, E_G, H, Q, R, P(:, :, j), mu(i));
     end
-    
-    fprintf('Valores de P, K e L para mu = %f\n', mu(i))
-    disp(P(:,:,Horizonte+1));
-    disp(K(:,:,Horizonte));
-    disp(L(:,:,Horizonte));
-    fprintf('------------------------------------------\n')
-    
+
+    disp("------------------------------------------");
+    disp("P, K and L values for mu = 10^" + log10(mu(i)));
+    disp(P(:,:,N+1));
+    disp(K(:,:,N));
+    disp(L(:,:,N));
+    disp("------------------------------------------");
+    disp("Cost and EF+EG*K values for mu = 10^" + log10(mu(i)));
+    disp(xo'*P(:,:,N+1)*xo);
+    disp(E_F+E_G*K(:,:,N));
+    disp("------------------------------------------");
+   
     % Robust Control for Unceartain Systems
-    [x_inc_rob, u_inc_rob] = closed_loop(K, L, xo, Horizonte, Fig_names(i+1));
+    [x_inc_rob, u_inc_rob] = closed_loop(K, L, xo, N, Fig_names(i+1));
 
     if i == length(mu)
     
@@ -87,17 +95,21 @@ for i=1:length(mu)
         [Gain, X, E] = dlqr(F, G, Q, R, zeros(3,2));
 
         [x_inc_nom,u_inc_nom,J_mean] = ...
-        closed_loop_via_lqr_nom(F, E_F, G, E_G, H, Q, R, Gain, xo, Horizonte);
+        closed_loop_via_lqr_nom(F, E_F, G, E_G, H, Q, R, Gain, xo, N);
 
-        pos_polos(F, E_F, G, E_G, H, K(:, :, Horizonte), 1000, Fig_names(i+1), Titles(i+1));
+        pos_polos(F, E_F, G, E_G, H, K(:, :, N), 1000, Fig_names(i+1), Titles(i+1));
 
-        fprintf('Fim\n')
+        disp("End")
 
     else
-
+        disp("System Paused. Press any key to continue...");
         pause
+
+        % Optional: close all figures and clear command window
         % close all
-        pos_polos(F, E_F, G, E_G, H, K(:, :, Horizonte), 1000, Fig_names(i+1), Titles(i+1));
+        % clc
+
+        pos_polos(F, E_F, G, E_G, H, K(:, :, N), 1000, Fig_names(i+1), Titles(i+1));
 
     end
 end
